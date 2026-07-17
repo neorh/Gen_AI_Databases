@@ -5,12 +5,8 @@ from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import Chroma
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-
-# ==============================================================================
-# IMPORTAÇÕES ATUALIZADAS (Correção do ModuleNotFoundError)
-# ==============================================================================
-from langchain.chains.retrieval import create_retrieval_chain
-from langchain.chains.combine_documents import create_stuff_documents_chain
+from langchain_core.runnables import RunnablePassthrough
+from langchain_core.output_parsers import StrOutputParser
 
 # ==============================================================================
 # CONFIGURAÇÕES SEGURAS VIA STREAMLIT SECRETS
@@ -22,10 +18,13 @@ API_KEY = st.secrets["AZURE_OPENAI_API_KEY"]
 st.set_page_config(page_title="iAutos Bot", page_icon="🤖")
 st.title("🤖 Assistente Virtual iAutos")
 
+# Formatar os documentos recuperados em texto simples para o prompt
+def format_docs(docs):
+    return "\n\n".join(doc.page_content for doc in docs)
+
 # Inicializar modelos e processar o PDF (usando cache para otimizar desempenho)
 @st.cache_resource
 def inicializar_bot():
-    # Inicializando ChatOpenAI apontando para o Azure
     llm = ChatOpenAI(
         openai_api_base=ENDPOINT, 
         openai_api_key=API_KEY, 
@@ -33,7 +32,6 @@ def inicializar_bot():
         temperature=0.2
     )
     
-    # Inicializando Embeddings apontando para o Azure
     embeddings = OpenAIEmbeddings(
         openai_api_base=ENDPOINT, 
         openai_api_key=API_KEY, 
@@ -49,10 +47,11 @@ def inicializar_bot():
     vector_db = Chroma.from_documents(docs, embeddings)
     retriever = vector_db.as_retriever(search_kwargs={"k": 3})
     
-    # Configura Prompts e Chains
+    # Configura o Prompt do Sistema
     system_prompt = (
         "Você é o assistente virtual inteligente da iAutos...\n"
-        "Use estritamente os fragmentos de contexto abaixo:\n\n{context}"
+        "Use estritamente os fragmentos de contexto abaixo para responder:\n\n"
+        "{context}"
     )
     prompt = ChatPromptTemplate.from_messages([
         ("system", system_prompt),
@@ -60,8 +59,19 @@ def inicializar_bot():
         ("human", "{input}"),
     ])
     
-    question_answer_chain = create_stuff_documents_chain(llm, prompt)
-    return create_retrieval_chain(retriever, question_answer_chain)
+    # CONSTRUÇÃO DA CADEIA NO PADRÃO MODERNO (LCEL)
+    # 1. Recuperamos os documentos do banco e enviamos para o prompt junto com o histórico
+    rag_chain = (
+        {
+            "context": retriever | format_docs,
+            "input": lambda x: x["input"],
+            "chat_history": lambda x: x["chat_history"]
+        }
+        | prompt
+        | llm
+        | StrOutputParser()
+    )
+    return rag_chain
 
 bot_chain = inicializar_bot()
 
@@ -81,19 +91,18 @@ if prompt_usuario := st.chat_input("Como posso te ajudar hoje?"):
         
     # Resposta do Bot
     with st.chat_message("assistant"):
-        # Formata o histórico do Streamlit para o formato de tuplas que o LangChain espera
+        # Formata o histórico do Streamlit no formato que o ChatPromptTemplate espera
         langchain_history = []
-        for msg in st.session_state.messages[:-1]: # ignora a última que acabou de ser adicionada
+        for msg in st.session_state.messages[:-1]: # ignora a última mensagem adicionada
             role = "human" if msg["role"] == "user" else "ai"
             langchain_history.append((role, msg["content"]))
             
-        # Invoca a chain passando o histórico real
-        resposta = bot_chain.invoke({
+        # Invoca a cadeia e retorna o texto diretamente
+        response_text = bot_chain.invoke({
             "input": prompt_usuario, 
             "chat_history": langchain_history
         }) 
         
-        response_text = resposta["answer"]
         st.markdown(response_text)
         
     st.session_state.messages.append({"role": "assistant", "content": response_text})
