@@ -8,12 +8,16 @@ st.set_page_config(
     layout="centered"
 )
 
-# Injetando CSS customizado para esconder marcas do Streamlit e otimizar mobile
+# Injetando CSS customizado para esconder marcas do Streamlit e melhorar espaçamento
 st.markdown("""
     <style>
         #MainMenu {visibility: hidden;} 
         footer {visibility: hidden;}    
         header {visibility: hidden;}    
+        /* Adiciona um pequeno espaço no fundo para os botões não ficarem colados no input */
+        .block-container {
+            padding-bottom: 120px;
+        }
     </style>
 """, unsafe_allow_html=True)
 
@@ -42,21 +46,10 @@ PERGUNTAS_SUGERIDAS = [
 # Variável para capturar cliques de botões
 pergunta_clicada = None
 
-# 2. Barra Lateral (Sidebar) com Informações e Sugestões Persistentes
+# 2. Barra Lateral (Apenas utilitários, sem as perguntas)
 with st.sidebar:
     st.title("🚗 iAutos Bot")
     st.markdown("Seu assistente virtual especialista no marketplace de classificados de veículos.")
-    st.divider()
-    
-    # Seção dedicada aos botões rápidos de sugestões de perguntas (sempre visíveis aqui!)
-    st.markdown("### 💡 Sugestões de Perguntas")
-    st.markdown("Clique em qualquer pergunta abaixo para enviá-la rapidamente:")
-    
-    # Renderiza os botões em formato de lista (um abaixo do outro, ideal para celulares)
-    for i, pergunta in enumerate(PERGUNTAS_SUGERIDAS):
-        if st.button(pergunta, key=f"sugestao_sidebar_{i}", use_container_width=True):
-            pergunta_clicada = pergunta
-            
     st.divider()
     
     st.markdown("### Opções")
@@ -65,21 +58,33 @@ with st.sidebar:
         st.session_state.messages = []
         st.rerun()
 
-# 3. Tela de Boas-vindas (Apenas texto discreto se o chat estiver totalmente vazio)
+# 3. Tela de Boas-vindas (Se o chat estiver totalmente vazio)
 if len(st.session_state.messages) == 0:
     st.markdown("<h2 style='text-align: center; color: #4A90E2;'>Olá! Eu sou o assistente da iAutos</h2>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align: center;'>Use as perguntas rápidas na barra lateral ou digite sua própria pergunta abaixo.</p>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; margin-bottom: 30px;'>Como posso te ajudar hoje?</p>", unsafe_allow_html=True)
 
-# Renderiza as mensagens anteriores do histórico na tela principal
+# 4. Renderiza as mensagens anteriores do histórico na tela principal
 for message in st.session_state.messages:
     avatar = USER_AVATAR if message["role"] == "user" else BOT_AVATAR
     with st.chat_message(message["role"], avatar=avatar):
         st.markdown(message["content"])
 
-# 4. Entrada de Dados: Aceita digitação ou o clique dos botões da sidebar
+# 5. Seção Fixa de Sugestões de Perguntas na Tela Principal (Abaixo do chat)
+st.markdown("---")
+st.caption("💡 **Perguntas Rápidas:** Escolha uma opção abaixo para perguntar instantaneamente:")
+
+# Criando colunas no desktop que viram blocos empilhados no mobile automaticamente
+cols = st.columns(len(PERGUNTAS_SUGERIDAS))
+for i, pergunta in enumerate(PERGUNTAS_SUGERIDAS):
+    with cols[i]:
+        # Cada botão aciona a pergunta correspondente ao ser clicado
+        if st.button(pergunta, key=f"sugestao_tela_{i}", use_container_width=True):
+            pergunta_clicada = pergunta
+
+# 6. Entrada de Dados (Campo de digitação fixado na base do Streamlit)
 prompt_usuario = st.chat_input("Digite sua pergunta aqui...")
 
-# Se o usuário digitou ou clicou em um dos botões rápidos da barra lateral
+# Se o usuário digitou ou clicou em um dos botões rápidos
 if prompt_usuario or pergunta_clicada:
     # Define a pergunta final a ser processada
     pergunta_final = prompt_usuario if prompt_usuario else pergunta_clicada
