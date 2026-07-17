@@ -39,7 +39,7 @@ BOT_AVATAR = "🚗"
 # Lista de perguntas sugeridas para exibir
 PERGUNTAS_SUGERIDAS = [
     "Como funciona o modelo de negócios da iAutos?",
-    "Quais informações contratuais são solicitadas?",
+    "Quais são as politicas para compradores?",
     "Como a iAutos se diferencia da concorrência?",
 ]
 
