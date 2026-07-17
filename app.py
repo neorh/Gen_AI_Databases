@@ -1,14 +1,14 @@
 import streamlit as st
 from src.rag_pipeline import create_rag_chain
 
-# 1. Configurações da página
+# 1. Configurações da página (Layout focado no chat)
 st.set_page_config(
     page_title="iAutos Bot", 
     page_icon="🚗", 
     layout="centered"
 )
 
-# Injetando CSS customizado para esconder marcas do Streamlit
+# Injetando CSS customizado para esconder marcas do Streamlit e otimizar mobile
 st.markdown("""
     <style>
         #MainMenu {visibility: hidden;} 
@@ -24,20 +24,6 @@ def load_bot():
 
 bot_chain = load_bot()
 
-# 2. Barra Lateral (Sidebar)
-with st.sidebar:
-    st.title("🚗 iAutos Bot")
-    st.markdown("Seu assistente virtual especialista no marketplace de classificados de veículos.")
-    st.divider()
-    
-    st.markdown("### Sobre")
-    st.info("Este bot utiliza IA Generativa (Azure OpenAI) e a tecnologia RAG para consultar documentos internos da empresa.")
-    
-    # Botão para limpar a conversa
-    if st.button("🗑️ Limpar Conversa", use_container_width=True):
-        st.session_state.messages = []
-        st.rerun()
-
 # Inicializa o histórico se não existir
 if "messages" not in st.session_state:
     st.session_state.messages = []
@@ -46,39 +32,54 @@ if "messages" not in st.session_state:
 USER_AVATAR = "👤"
 BOT_AVATAR = "🚗"
 
-# Lista de perguntas sugeridas para exibir na tela inicial
+# Lista de perguntas sugeridas para exibir
 PERGUNTAS_SUGERIDAS = [
     "Como funciona o modelo de negócios da iAutos?",
     "Quais são os principais canais de atração de leads?",
     "Como a iAutos se diferencia da concorrência?",
 ]
 
-# Variável para capturar se uma sugestão foi clicada
+# Variável para capturar cliques de botões
 pergunta_clicada = None
 
-# 3. Tela de Boas-vindas + Botões de Sugestão (se o chat estiver vazio)
-if len(st.session_state.messages) == 0:
-    st.markdown("<h2 style='text-align: center; color: #4A90E2;'>Como posso te ajudar hoje?</h2>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align: center; margin-bottom: 25px;'>Escolha uma das sugestões abaixo ou digite sua própria pergunta:</p>", unsafe_allow_html=True)
+# 2. Barra Lateral (Sidebar) com Informações e Sugestões Persistentes
+with st.sidebar:
+    st.title("🚗 iAutos Bot")
+    st.markdown("Seu assistente virtual especialista no marketplace de classificados de veículos.")
+    st.divider()
     
-    # Criando colunas lado a lado para os botões ficarem alinhados horizontalmente
-    cols = st.columns(len(PERGUNTAS_SUGERIDAS))
+    # Seção dedicada aos botões rápidos de sugestões de perguntas (sempre visíveis aqui!)
+    st.markdown("### 💡 Sugestões de Perguntas")
+    st.markdown("Clique em qualquer pergunta abaixo para enviá-la rapidamente:")
+    
+    # Renderiza os botões em formato de lista (um abaixo do outro, ideal para celulares)
     for i, pergunta in enumerate(PERGUNTAS_SUGERIDAS):
-        with cols[i]:
-            # Se o botão for clicado, guardamos o texto dele na variável
-            if st.button(pergunta, key=f"sugestao_{i}", use_container_width=True):
-                pergunta_clicada = pergunta
+        if st.button(pergunta, key=f"sugestao_sidebar_{i}", use_container_width=True):
+            pergunta_clicada = pergunta
+            
+    st.divider()
+    
+    st.markdown("### Opções")
+    # Botão para limpar a conversa
+    if st.button("🗑️ Limpar Conversa", use_container_width=True):
+        st.session_state.messages = []
+        st.rerun()
 
-# Renderiza as mensagens anteriores do histórico
+# 3. Tela de Boas-vindas (Apenas texto discreto se o chat estiver totalmente vazio)
+if len(st.session_state.messages) == 0:
+    st.markdown("<h2 style='text-align: center; color: #4A90E2;'>Olá! Eu sou o assistente da iAutos</h2>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center;'>Use as perguntas rápidas na barra lateral ou digite sua própria pergunta abaixo.</p>", unsafe_allow_html=True)
+
+# Renderiza as mensagens anteriores do histórico na tela principal
 for message in st.session_state.messages:
     avatar = USER_AVATAR if message["role"] == "user" else BOT_AVATAR
     with st.chat_message(message["role"], avatar=avatar):
         st.markdown(message["content"])
 
-# 4. Fluxo de Entrada de Dados (Aceita digitação ou o clique do botão)
+# 4. Entrada de Dados: Aceita digitação ou o clique dos botões da sidebar
 prompt_usuario = st.chat_input("Digite sua pergunta aqui...")
 
-# Se o usuário digitou algo OU clicou em um botão de sugestão:
+# Se o usuário digitou ou clicou em um dos botões rápidos da barra lateral
 if prompt_usuario or pergunta_clicada:
     # Define a pergunta final a ser processada
     pergunta_final = prompt_usuario if prompt_usuario else pergunta_clicada
