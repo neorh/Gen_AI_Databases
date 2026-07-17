@@ -12,46 +12,40 @@ from langchain_core.output_parsers import StrOutputParser
 # ==============================================================================
 # CONFIGURAÇÕES SEGURAS VIA STREAMLIT SECRETS
 # ==============================================================================
-# Informações do seu painel do Azure e do Streamlit Secrets
 ENDPOINT = st.secrets["AZURE_OPENAI_ENDPOINT"]
-DEPLOYMENT_NAME = st.secrets["AZURE_DEPLOYMENT_NAME"] # Corresponde a "gpt-5-mini" para o chat
+DEPLOYMENT_NAME = st.secrets["AZURE_DEPLOYMENT_NAME"] # Deve ser "gpt-5-mini"
 API_KEY = st.secrets["AZURE_OPENAI_API_KEY"]
 API_VERSION = st.secrets.get("AZURE_OPENAI_API_VERSION", "2024-02-01")
 
 st.set_page_config(page_title="iAutos Bot", page_icon="🤖")
 st.title("🤖 Assistente Virtual iAutos")
 
-# Formatar os documentos recuperados em texto simples para o prompt
 def format_docs(docs):
     return "\n\n".join(doc.page_content for doc in docs)
 
-# Inicializar modelos e processar o PDF (usando cache do Streamlit)
 @st.cache_resource
 def inicializar_bot():
-    # Inicialização correta do LLM usando a classe do Azure
+    # Modelo de Chat (LLM) - usa o nome dos secrets
     llm = AzureChatOpenAI(
         azure_endpoint=ENDPOINT,
         api_key=API_KEY,
-        azure_deployment=DEPLOYMENT_NAME,  # Usa "gpt-5-mini" dos seus secrets
+        azure_deployment=DEPLOYMENT_NAME,
         api_version=API_VERSION,
         temperature=0.2
     )
     
-    # Inicialização correta das Embeddings usando a classe do Azure
+    # Modelo de Embedding - usa o nome que vimos na sua imagem
     embeddings = AzureOpenAIEmbeddings(
         azure_endpoint=ENDPOINT,
         api_key=API_KEY,
-        # ============================= ATENÇÃO AQUI =============================
-        # Verifique no seu painel do Azure qual o "Nome da Implantação"
-        # que você deu para o seu modelo de embedding (ex: text-embedding-3-small).
-        # Se você usou o mesmo nome "gpt-5-mini" para a implantação de embedding,
-        # o código abaixo funcionará. Caso contrário, substitua pela correta.
-        # ========================================================================
-        azure_deployment="gpt-5-mini", 
+        # ======================== AJUSTE FINAL AQUI ========================
+        # Usando o nome exato da sua implantação de embedding do Azure
+        azure_deployment="text-embedding-3-small", 
+        # =================================================================
         api_version=API_VERSION,
     )
     
-    # Processa o PDF fixo
+    # O resto do código continua igual...
     loader = PyPDFLoader("Caso de uso - Marketplace de classificados veículos.pdf")
     paginas = loader.load()
     text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
@@ -59,3 +53,58 @@ def inicializar_bot():
     
     vector_db = Chroma.from_documents(docs, embeddings)
     retriever = vector_db.as_retriever(search_kwargs={"k": 3})
+    
+    system_prompt = (
+        "Você é o assistente virtual inteligente da iAutos...\n"
+        "Use estritamente os fragmentos de contexto abaixo para responder:\n\n"
+        "{context}"
+    )
+    prompt = ChatPromptTemplate.from_messages([
+        ("system", system_prompt),
+        MessagesPlaceholder(variable_name="chat_history"),
+        ("human", "{input}"),
+    ])
+    
+    rag_chain = (
+        {
+            "context": retriever | format_docs,
+            "input": lambda x: x["input"],
+            "chat_history": lambda x: x["chat_history"]
+        }
+        | prompt
+        | llm
+        | StrOutputParser()
+    )
+    return rag_chain
+
+# --- O restante do seu código para interface do Streamlit ---
+
+bot_chain = inicializar_bot()
+
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+
+for message in st.session_state.messages:
+    with st.chat_message(message["role"]):
+        st.markdown(message["content"])
+
+if prompt_usuario := st.chat_input("Como posso te ajudar hoje?"):
+    st.session_state.messages.append({"role": "user", "content": prompt_usuario})
+    with st.chat_message("user"):
+        st.markdown(prompt_usuario)
+        
+    with st.chat_message("assistant"):
+        langchain_history = []
+        for msg in st.session_state.messages[:-1]:
+            role = "human" if msg["role"] == "user" else "ai"
+            langchain_history.append((role, msg["content"]))
+            
+        response_text = bot_chain.invoke({
+            "input": prompt_usuario, 
+            "chat_history": langchain_history
+        }) 
+        
+        st.markdown(response_text)
+        
+    st.session_state.messages.append({"role": "assistant", "content": response_text})
+
