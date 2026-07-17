@@ -5,12 +5,15 @@ from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import Chroma
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain.chains import create_retrieval_chain
+
+# ==============================================================================
+# IMPORTAÇÕES ATUALIZADAS (Correção do ModuleNotFoundError)
+# ==============================================================================
+from langchain.chains.retrieval import create_retrieval_chain
 from langchain.chains.combine_documents import create_stuff_documents_chain
 
 # ==============================================================================
 # CONFIGURAÇÕES SEGURAS VIA STREAMLIT SECRETS
-# Puxando os dados que você salvou no painel do Streamlit Cloud
 # ==============================================================================
 ENDPOINT = st.secrets["AZURE_OPENAI_ENDPOINT"]
 DEPLOYMENT_NAME = st.secrets["AZURE_DEPLOYMENT_NAME"]
@@ -19,11 +22,23 @@ API_KEY = st.secrets["AZURE_OPENAI_API_KEY"]
 st.set_page_config(page_title="iAutos Bot", page_icon="🤖")
 st.title("🤖 Assistente Virtual iAutos")
 
-# Inicializar modelos e processar o PDF (usando cache do Streamlit para não reprocessar toda hora)
+# Inicializar modelos e processar o PDF (usando cache para otimizar desempenho)
 @st.cache_resource
 def inicializar_bot():
-    llm = ChatOpenAI(openai_api_base=ENDPOINT, openai_api_key=API_KEY, model_name=DEPLOYMENT_NAME, temperature=0.2)
-    embeddings = OpenAIEmbeddings(openai_api_base=ENDPOINT, openai_api_key=API_KEY, model="text-embedding-3-small")
+    # Inicializando ChatOpenAI apontando para o Azure
+    llm = ChatOpenAI(
+        openai_api_base=ENDPOINT, 
+        openai_api_key=API_KEY, 
+        model_name=DEPLOYMENT_NAME, 
+        temperature=0.2
+    )
+    
+    # Inicializando Embeddings apontando para o Azure
+    embeddings = OpenAIEmbeddings(
+        openai_api_base=ENDPOINT, 
+        openai_api_key=API_KEY, 
+        model="text-embedding-3-small"
+    )
     
     # Processa o PDF fixo
     loader = PyPDFLoader("Caso de uso - Marketplace de classificados veículos.pdf")
@@ -63,11 +78,21 @@ if prompt_usuario := st.chat_input("Como posso te ajudar hoje?"):
     st.session_state.messages.append({"role": "user", "content": prompt_usuario})
     with st.chat_message("user"):
         st.markdown(prompt_usuario)
-
+        
     # Resposta do Bot
     with st.chat_message("assistant"):
-        # Converte o histórico para o formato que o LangChain espera se necessário, ou simula
-        resposta = bot_chain.invoke({"input": prompt_usuario, "chat_history": []}) 
+        # Formata o histórico do Streamlit para o formato de tuplas que o LangChain espera
+        langchain_history = []
+        for msg in st.session_state.messages[:-1]: # ignora a última que acabou de ser adicionada
+            role = "human" if msg["role"] == "user" else "ai"
+            langchain_history.append((role, msg["content"]))
+            
+        # Invoca a chain passando o histórico real
+        resposta = bot_chain.invoke({
+            "input": prompt_usuario, 
+            "chat_history": langchain_history
+        }) 
+        
         response_text = resposta["answer"]
         st.markdown(response_text)
         
