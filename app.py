@@ -35,7 +35,7 @@ def inicializar_bot():
         api_key=API_KEY,
         azure_deployment=DEPLOYMENT_NAME,
         api_version=API_VERSION,
-        temperature=0.2
+        temperature=1
     )
     
     # Modelo de Embedding - usa o nome exato da sua implantação de embedding do Azure
