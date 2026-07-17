@@ -9,10 +9,13 @@ from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain.chains import create_history_aware_retriever, create_retrieval_chain
 from langchain.chains.combine_documents import create_stuff_documents_chain
 
-# Configurações da API (As mesmas que você já configurou)
-ENDPOINT = "https://gen-ai-database-trabalho-final.openai.azure.com/openai/v1"
-DEPLOYMENT_NAME = "gpt-5-mini"
-API_KEY = "AxKGHm51EcdbtTy2Jr3bxYQfuMkuTFXg5GS7vSbfE9785DHc06ymJQQJ99CGACHYHv6XJ3w3AAAAACOGesBS."
+# ==============================================================================
+# CONFIGURAÇÕES SEGURAS VIA STREAMLIT SECRETS
+# Puxando os dados que você salvou no painel do Streamlit Cloud
+# ==============================================================================
+ENDPOINT = st.secrets["AZURE_OPENAI_ENDPOINT"]
+DEPLOYMENT_NAME = st.secrets["AZURE_DEPLOYMENT_NAME"]
+API_KEY = st.secrets["AZURE_OPENAI_API_KEY"]
 
 st.set_page_config(page_title="iAutos Bot", page_icon="🤖")
 st.title("🤖 Assistente Virtual iAutos")
