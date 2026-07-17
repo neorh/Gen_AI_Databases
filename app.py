@@ -1,5 +1,6 @@
 import streamlit as st
 import os
+from operator import itemgetter
 # Importando as classes específicas para o ecossistema Azure OpenAI
 from langchain_openai import AzureChatOpenAI, AzureOpenAIEmbeddings
 from langchain_community.document_loaders import PyPDFLoader
@@ -67,19 +68,19 @@ def inicializar_bot():
         ("human", "{input}"),
     ])
     
-    # Configura a cadeia moderna de execução (LCEL)
+    # Configura a cadeia moderna de execução (LCEL) com roteamento correto
     rag_chain = (
         {
-            "context": retriever | format_docs,
-            "input": lambda x: x["input"],
-            "chat_history": lambda x: x["chat_history"]
+            # O itemgetter pega apenas o texto da chave "input" e manda para o retriever
+            "context": itemgetter("input") | retriever | format_docs,
+            "input": itemgetter("input"),
+            "chat_history": itemgetter("chat_history")
         }
         | prompt
         | llm
         | StrOutputParser()
     )
     return rag_chain
-
 # Inicialização do Bot
 bot_chain = inicializar_bot()
 
