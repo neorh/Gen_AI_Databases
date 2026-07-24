@@ -1,11 +1,14 @@
 from operator import itemgetter
 from langchain_openai import AzureChatOpenAI, AzureOpenAIEmbeddings
 from langchain_community.document_loaders import PyPDFLoader
-from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import Chroma
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.output_parsers import StrOutputParser
 
+# Importação da técnica avançada de fatiamento semântico
+from langchain_experimental.text_splitter import SemanticChunker
+
+# Importação das configurações seguras
 from src.config import settings
 
 def format_docs(docs):
@@ -13,7 +16,7 @@ def format_docs(docs):
     return "\n\n".join(doc.page_content for doc in docs)
 
 def create_rag_chain():
-    """Inicializa os modelos, carrega o PDF e constrói o pipeline RAG (LCEL)."""
+    """Inicializa os modelos, carrega o PDF usando Semantic Chunking e constrói o pipeline RAG (LCEL)."""
     
     # 1. Inicializa os Modelos
     llm = AzureChatOpenAI(
@@ -21,7 +24,7 @@ def create_rag_chain():
         api_key=settings.API_KEY,
         azure_deployment=settings.DEPLOYMENT_NAME,
         api_version=settings.API_VERSION,
-        temperature=1.0 
+        temperature=1.0  # Mantendo 1.0 para compatibilidade com modelos o1/gpt-5-mini
     )
     
     embeddings = AzureOpenAIEmbeddings(
@@ -31,19 +34,36 @@ def create_rag_chain():
         api_version=settings.API_VERSION,
     )
     
-    # 2. Processa Documentos e Cria o Banco Vetorial
+    # 2. Processa Documentos com SEMANTIC CHUNKING
     loader = PyPDFLoader(settings.PDF_PATH)
     paginas = loader.load()
-    text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
-    docs = text_splitter.split_documents(paginas)
     
+    # Junta todo o texto para o fatiador inteligente poder ler organicamente
+    texto_completo = " ".join([pag.page_content for pag in paginas])
+    
+    # Configura o fatiador semântico usando as embeddings do Azure
+    semantic_splitter = SemanticChunker(
+        embeddings,
+        breakpoint_threshold_type="percentile"
+    )
+    
+    # Gera os documentos fatiados com base em mudança de assunto
+    docs = semantic_splitter.create_documents([texto_completo])
+    
+    # 3. Cria o Banco Vetorial
     vector_db = Chroma.from_documents(docs, embeddings)
     retriever = vector_db.as_retriever(search_kwargs={"k": 3})
     
-    # 3. Configura o Prompt
+    # 4. Configura o Prompt e Persona
     system_prompt = (
-        "Você é o assistente virtual inteligente da iAutos...\n"
-        "Use estritamente os fragmentos de contexto abaixo para responder:\n\n"
+        "Você é o assistente virtual oficial de atendimento ao cliente da iAutos, um marketplace de classificados de veículos.\n"
+        "Sua missão é ajudar vendedores e compradores a entenderem as regras de publicação e uso da plataforma.\n\n"
+        "DIRETRIZES DE COMPORTAMENTO:\n"
+        "1. Seja sempre educado, prestativo e utilize uma linguagem clara e profissional.\n"
+        "2. Responda APENAS com base nos fragmentos de contexto fornecidos abaixo.\n"
+        "3. Se a dúvida do cliente NÃO estiver no contexto, diga educadamente que não possui essa informação e oriente a contatar o suporte humano.\n"
+        "4. Formate respostas longas em tópicos (bullet points) para facilitar a leitura.\n\n"
+        "CONTEXTO DE CONHECIMENTO:\n"
         "{context}"
     )
     prompt = ChatPromptTemplate.from_messages([
@@ -52,7 +72,7 @@ def create_rag_chain():
         ("human", "{input}"),
     ])
     
-    # 4. Constrói a Cadeia (Chain)
+    # 5. Constrói a Cadeia (Chain) LCEL
     rag_chain = (
         {
             "context": itemgetter("input") | retriever | format_docs,
